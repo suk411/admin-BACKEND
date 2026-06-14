@@ -14,15 +14,15 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(cookieParser());
 
+const allowedOrigins = [
+  "https://emerald-admin-suite.vercel.app",
+];
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      const allowed = (process.env.CORS_ORIGINS || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      callback(null, allowed.length === 0 || allowed.includes(origin));
+      callback(null, allowedOrigins.includes(origin));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
