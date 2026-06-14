@@ -1,0 +1,57 @@
+import mongoose from "mongoose";
+
+const deviceLogSchema = new mongoose.Schema(
+  {
+    userId: { type: Number, required: true, index: true },
+    ip: { type: String, default: "" },
+    network: { type: String, default: "" },
+    version: { type: String, default: "" },
+    ipCountry: { type: String, default: "" },
+    ipCity: { type: String, default: "" },
+    city: { type: String, default: "" },
+    region: { type: String, default: "" },
+    region_code: { type: String, default: "" },
+    country: { type: String, default: "" },
+    country_name: { type: String, default: "" },
+    country_code: { type: String, default: "" },
+    country_code_iso3: { type: String, default: "" },
+    country_capital: { type: String, default: "" },
+    country_tld: { type: String, default: "" },
+    continent_code: { type: String, default: "" },
+    in_eu: { type: Boolean, default: false },
+    postal: { type: String, default: "" },
+    latitude: { type: Number, default: 0 },
+    longitude: { type: Number, default: 0 },
+    timezone: { type: String, default: "" },
+    utc_offset: { type: String, default: "" },
+    country_calling_code: { type: String, default: "" },
+    currency: { type: String, default: "" },
+    currency_name: { type: String, default: "" },
+    languages: { type: String, default: "" },
+    country_area: { type: Number, default: 0 },
+    country_population: { type: Number, default: 0 },
+    asn: { type: String, default: "" },
+    org: { type: String, default: "" },
+    isp: { type: String, default: "" },
+    proxy: { type: Boolean, default: false },
+    vpnDetected: { type: Boolean, default: false },
+    deviceId: { type: String, default: "", index: true },
+    fingerprint: { type: String, default: "", index: true },
+    adId: { type: String, default: "", index: true },
+    platform: { type: String, default: "" },
+    browser: { type: String, default: "" },
+    os: { type: String, default: "" },
+    screenResolution: { type: String, default: "" },
+    deviceMemory: { type: Number, default: 0 },
+    paymentMethodHash: { type: String, default: "", index: true },
+    riskScore: { type: Number, default: 0, index: true },
+    signals: { type: [String], default: [] },
+    flagged: { type: Boolean, default: false },
+  },
+  { timestamps: true, versionKey: false },
+);
+
+deviceLogSchema.index({ userId: 1, createdAt: -1 });
+deviceLogSchema.index({ ip: 1 });
+
+export default mongoose.model("DeviceLog", deviceLogSchema);

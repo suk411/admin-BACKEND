@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: admin-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/admin/auth/me
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5000"
+      - key: MONGO_URI
+        sync: false
+      - key: WINGO_MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SIMPLYPAY_APP_ID
+        sync: false
+      - key: SIMPLYPAY_SECRET_KEY
+        sync: false
+      - key: SIMPLYPAY_BASE_URL
+        sync: false
+      - key: SIMPLYPAY_PAYOUT_NOTIFY_URL
+        sync: false
+      - key: UPAY_MERCHANT_ID
+        sync: false
+      - key: UPAY_MERCHANT_KEY
+        sync: false
+      - key: UPAY_BASE_URL
+        sync: false
+      - key: UPAY_PAYOUT_CALLBACK_URL
+        sync: false
+      - key: GSPAY_AUTH_KEY
+        sync: false
+      - key: GSPAY_SECRET_KEY
+        sync: false
+      - key: GSPAY_BASE_URL
+        sync: false
+      - key: GSPAY_PAYOUT_CALLBACK_URL
+        sync: false
+      - key: GAME_API_URL
+        sync: false
+      - key: OPERATOR_CODE
+        sync: false
+      - key: GAME_SECRET_KEY
+        sync: false
