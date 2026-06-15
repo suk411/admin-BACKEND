@@ -23,7 +23,7 @@ export async function createPayoutOrderForWithdrawal(withdrawalOrder, user, payo
         accountHolder: pd.holderName || withdrawalOrder.bankDetails?.accountHolder || "",
         ifsc: pd.ifsc || withdrawalOrder.bankDetails?.ifsc || "",
       }
-    : withdrawalOrder.bankDetails;
+    : (withdrawalOrder.bankDetails || {});
 
   const accountNumber = pmType === "UPI" ? bankDetails?.accountNumber : bankDetails?.accountNumber;
   const ifscCode = pmType === "UPI" ? "" : bankDetails?.ifsc;
