@@ -4,6 +4,16 @@ import jwt from "jsonwebtoken";
 
 export async function authMiddleware(req, res, next) {
   try {
+    const botToken = req.headers["x-bot-token"];
+    if (botToken) {
+      const expectedToken = process.env.BOT_API_KEY;
+      if (!expectedToken || botToken !== expectedToken) {
+        return res.status(403).json({ msg: "Invalid bot token", status: "failed" });
+      }
+      req.user = { bot: true };
+      return next();
+    }
+
     const token =
       req.cookies.token || req.headers.authorization?.replace("Bearer ", "");
 
