@@ -5,9 +5,7 @@ import { createPayoutOrder } from "./paysimply.service.js";
 import { createPayoutOrder as createUpayPayoutOrder } from "./upay.service.js";
 import { createPayoutOrder as createGspayPayoutOrder } from "./gspay.service.js";
 import { CHANNEL_MAP as GSPAY_CHANNEL_MAP } from "./gspay.service.js";
-import { incrementWithdrawalTally } from "./agency.service.js";
 import mongoose from "mongoose";
-import logger from "../utils/logger.js";
 
 export async function createPayoutOrderForWithdrawal(withdrawalOrder, user, payoutAmount) {
   const pmType = withdrawalOrder.paymentMethod || "BANK";
