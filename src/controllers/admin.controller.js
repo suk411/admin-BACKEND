@@ -210,7 +210,7 @@ async function searchUserOrAccount(req, res) {
       const userIds = await DeviceLog.distinct("userId", { ip: lastDevice.ip, userId: { $ne: idNum } });
       sameIpUsers = userIds.length;
     }
-    const { _id, turnover_batches, ...accountRest } = accountDoc || {};
+    const { _id, turnover_batches, lastWeeklyBonusAt, pendingUpgradeBonus, firstDepositBonusGiven, ...accountRest } = accountDoc || {};
     const account = accountDoc
       ? {
           ...accountRest,
