@@ -217,7 +217,6 @@ async function searchUserOrAccount(req, res) {
           turnover_batches: turnover_batches?.map(({ _id, lastCalcAt, lastBetId, sourceRef, ...batch }) => batch) || [],
         }
       : null;
-    const { _id: _di, ...deviceInfo } = lastDevice || {};
     res.json({
       user: user
         ? {
@@ -232,7 +231,9 @@ async function searchUserOrAccount(req, res) {
       paymentMethods: paymentMethod || null,
       sameIpUsers,
       lastIp: lastDevice?.ip || null,
-      deviceInfo: deviceInfo || null,
+      deviceInfo: lastDevice
+        ? { ip: lastDevice.ip || "", city: lastDevice.city || "", region: lastDevice.region || "" }
+        : null,
     });
   } catch (error) {
     logger.error(error, { where: "searchUserOrAccount", userId });
