@@ -15,7 +15,9 @@ app.use(express.json());
 app.use(cookieParser());
 
 const allowedOrigins = [
-  "https://emerald-admin-suite.vercel.app",
+  "https://emerald-admin-suite.vercel.app" ,
+   "https://1xkingadminnew.vercel.app",
+   "http://localhost:3000",
 ];
 
 app.use(
