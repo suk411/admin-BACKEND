@@ -12,6 +12,12 @@ const wingoBetSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    gameMode: {
+      type: String,
+      enum: ["30s", "1m", "3m", "5m"],
+      default: "30s",
+      index: true,
+    },
     orderNumber: {
       type: String,
       required: true,

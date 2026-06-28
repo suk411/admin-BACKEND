@@ -16,6 +16,12 @@ const wingoIssueSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  gameMode: {
+    type: String,
+    enum: ["30s", "1m", "3m", "5m"],
+    default: "30s",
+    index: true,
+  },
   result: {
     number: { type: Number, default: null },
     color: { type: String, default: null },
@@ -36,5 +42,7 @@ const wingoIssueSchema = new mongoose.Schema({
 wingoIssueSchema.index({ createdAt: -1 });
 wingoIssueSchema.index({ status: 1, createdAt: -1 });
 wingoIssueSchema.index({ status: 1, "result.number": 1, createdAt: -1 });
+wingoIssueSchema.index({ gameMode: 1, status: 1, createdAt: -1 });
+wingoIssueSchema.index({ gameMode: 1, status: 1, "result.number": 1, createdAt: -1 });
 
 export default conn.model("WingoIssue", wingoIssueSchema);

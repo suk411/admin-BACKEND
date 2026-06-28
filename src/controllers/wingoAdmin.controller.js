@@ -4,18 +4,20 @@ import WingoIssue from "../models/WingoIssue.js";
 import { getResultMode, setResultMode } from "../services/resultMode.service.js";
 import { getCurrentIssueNumber, getRoundData } from "../services/roundService.js";
 import logger from "../utils/logger.js";
+import { extractMode } from "../config/gameModes.js";
 
 async function setMode(req, res) {
   try {
-    const { mode } = req.body;
-    if (!mode || !["RANDOM", "MAX_PROFIT", "MAX_LOSS"].includes(mode)) {
+    const { mode: resultMode } = req.body;
+    const gameMode = extractMode(req);
+    if (!resultMode || !["RANDOM", "MAX_PROFIT", "MAX_LOSS"].includes(resultMode)) {
       return res.status(400).json({ success: false, msg: "Invalid mode. Must be RANDOM, MAX_PROFIT, or MAX_LOSS" });
     }
-    const currentIssue = getCurrentIssueNumber();
-    await setResultMode(mode);
+    const currentIssue = getCurrentIssueNumber(gameMode);
+    await setResultMode(resultMode, gameMode);
     const nextSeq = parseInt(currentIssue.slice(-5), 10) + 1;
     const applyIssue = currentIssue.slice(0, -5) + String(nextSeq).padStart(5, "0");
-    logger.info(`[WingoAdmin] Result mode changed to ${mode}, apply from issue ${applyIssue}`);
+    logger.info(`[WingoAdmin] Result mode changed to ${resultMode} for ${gameMode}, apply from issue ${applyIssue}`);
     res.json({ success: true, currentIssue, applyIssue });
   } catch (error) {
     logger.error(`[WingoAdmin] setMode error: ${error.message}`);
@@ -25,7 +27,8 @@ async function setMode(req, res) {
 
 async function getMode(req, res) {
   try {
-    const mode = await getResultMode();
+    const gameMode = extractMode(req);
+    const mode = await getResultMode(gameMode);
     res.json({ success: true, mode });
   } catch (error) {
     logger.error(`[WingoAdmin] getMode error: ${error.message}`);
@@ -35,7 +38,8 @@ async function getMode(req, res) {
 
 async function getAdminCurrentRound(req, res) {
   try {
-    const roundData = getRoundData();
+    const mode = extractMode(req);
+    const roundData = getRoundData(mode);
     const currentIssue = roundData.current.issueNumber;
 
     const [issue, bets] = await Promise.all([
@@ -75,7 +79,8 @@ async function getAdminCurrentRound(req, res) {
 
 async function getCurrentRoundBets(req, res) {
   try {
-    const currentIssue = getCurrentIssueNumber();
+    const mode = extractMode(req);
+    const currentIssue = getCurrentIssueNumber(mode);
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
     const skip = (page - 1) * limit;
@@ -167,9 +172,11 @@ async function getRounds(req, res) {
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 25));
     const skip = (page - 1) * limit;
 
+    const mode = extractMode(req);
+    const filter = { status: "settled", gameMode: mode };
     const [issues, total] = await Promise.all([
-      WingoIssue.find({ status: "settled" }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      WingoIssue.countDocuments({ status: "settled" }),
+      WingoIssue.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      WingoIssue.countDocuments(filter),
     ]);
 
     const issueNumbers = issues.map(i => i.issueNumber);
