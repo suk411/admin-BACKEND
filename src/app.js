@@ -27,7 +27,6 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-bot-token"],
 };
 
-app.options("*", cors(corsOptions));
 app.use(cors(corsOptions));
 
 app.use(morgan("dev"));
