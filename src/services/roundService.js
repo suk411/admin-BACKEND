@@ -74,8 +74,7 @@ function issueFromTimestamp(ts, mode = DEFAULT_MODE, durationMs) {
   const periodsSinceMidnight = Math.floor((ts - startOfDay) / ms) + 1;
   const numPart = String(periodsSinceMidnight).padStart(5, "0");
 
-  if (mode === "30s") return `${basePart}${numPart}`;
-  return `${mode.toUpperCase()}_${basePart}${numPart}`;
+  return `${basePart}${numPart}`;
 }
 
 export { getRoundData, getCurrentIssueNumber, getNextIssueNumber, getPreviousIssueNumber };
