@@ -42,10 +42,22 @@ async function getAdminCurrentRound(req, res) {
     const roundData = getRoundData(mode);
     const currentIssue = roundData.current.issueNumber;
 
-    const [issue, bets] = await Promise.all([
-      WingoIssue.findOne({ issueNumber: currentIssue }).lean(),
-      WingoBet.find({ issueNumber: currentIssue }).lean(),
-    ]);
+    let issue = await WingoIssue.findOne({ issueNumber: currentIssue }).lean();
+
+    if (!issue) {
+      const resultMode = await getResultMode(mode);
+      issue = {
+        issueNumber: currentIssue,
+        startTime: roundData.current.startTime,
+        endTime: roundData.current.endTime,
+        gameMode: mode,
+        result: { number: null, color: null, size: null },
+        resultMode,
+        status: "open",
+      };
+    }
+
+    const bets = await WingoBet.find({ issueNumber: currentIssue }).lean();
 
     const validTypes = ["red", "green", "violet", "big", "small", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
     const breakdown = {};
@@ -63,7 +75,7 @@ async function getAdminCurrentRound(req, res) {
 
     res.json({
       success: true,
-      round: issue || roundData.current,
+      round: issue,
       stats: {
         totalBets: bets.length,
         totalBetAmount,
