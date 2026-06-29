@@ -17,5 +17,5 @@ export function redisKey(base, mode = DEFAULT_MODE) {
 }
 
 export function extractMode(req) {
-  return req.query?.mode || req.body?.mode || DEFAULT_MODE;
+  return req.query?.mode || req.body?.gameMode || req.body?.mode || DEFAULT_MODE;
 }
