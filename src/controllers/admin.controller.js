@@ -1341,9 +1341,9 @@ async function getUserTeamMembers(req, res) {
       accountModel.find({ user: { $in: pageIds } }).select("user balance").lean(),
       PaymentMethod.find({ userId: { $in: pageIds } }).select("userId").lean(),
       DeviceLog.aggregate([
-        { $match: { userId: { $in: pageIds } } },
-        { $group: { _id: "$userId", ips: { $addToSet: "$ip" } } },
-        { $project: { _id: 1, ipCount: { $size: "$ips" } } },
+        { $match: { userId: { $in: pageIds }, ip: { $ne: "" } } },
+        { $group: { _id: "$ip", userIds: { $addToSet: "$userId" } } },
+        { $match: { $expr: { $gt: [{ $size: "$userIds" }, 1] } } },
       ]),
     ]);
 
@@ -1354,8 +1354,13 @@ async function getUserTeamMembers(req, res) {
     const balanceMap = {};
     for (const a of accounts) balanceMap[a.user] = a.balance;
     const paymentSet = new Set(paymentMethods.map((p) => p.userId));
-    const ipMap = {};
-    for (const i of ipData) ipMap[i._id] = i.ipCount;
+
+    const sharedIpUserIds = new Set();
+    for (const ip of ipData) {
+      for (const uid of ip.userIds) {
+        sharedIpUserIds.add(uid);
+      }
+    }
 
     const items = pageItems.map((m) => ({
       userId: m.userId,
@@ -1365,7 +1370,7 @@ async function getUserTeamMembers(req, res) {
       totalWithdrawal: withdrawalMap[m.userId] || 0,
       balance: balanceMap[m.userId] ?? 0,
       bindBank: paymentSet.has(m.userId),
-      multipleIp: (ipMap[m.userId] || 0) > 1,
+      multipleIp: sharedIpUserIds.has(m.userId),
     }));
 
     res.json({ status: "success", userId: idNum, total, page: pg, limit: lm, items });
