@@ -61,6 +61,9 @@ router.post("/turnover/add", adminController.addUserTurnover);
 router.get("/agency-levels", adminController.getAgencyLevelConfigs);
 router.put("/agency-levels/:level", adminController.updateAgencyLevelConfig);
 
+// Agent team stats
+router.get("/agent/team-stats", adminController.getUserTeamStats);
+
 // Gift codes
 router.post("/gift-codes", giftCodeController.createGiftCode);
 router.get("/gift-codes", giftCodeController.listGiftCodes);

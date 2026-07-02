@@ -1164,6 +1164,92 @@ async function updateWithdrawalConfig(req, res) {
   }
 }
 
+async function getUserTeamStats(req, res) {
+  try {
+    const { userId, tier, dateFrom, dateTo } = req.query;
+    const idNum = Number(userId);
+    if (!userId || Number.isNaN(idNum)) {
+      return res.status(400).json({ msg: "Invalid or missing userId" });
+    }
+
+    const user = await userModel.findOne({ userId: idNum }).select("userId").lean();
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const teamMembers = await userModel.find({ path: idNum }).select("userId path").lean();
+
+    const l1 = [], l2 = [], l3 = [];
+    for (const m of teamMembers) {
+      const p = m.path;
+      const len = p.length;
+      if (len >= 1 && p[len - 1] === idNum) l1.push(m.userId);
+      else if (len >= 2 && p[len - 2] === idNum) l2.push(m.userId);
+      else if (len >= 3 && p[len - 3] === idNum) l3.push(m.userId);
+    }
+
+    let targetIds;
+    if (tier === "L1") targetIds = l1;
+    else if (tier === "L2") targetIds = l2;
+    else if (tier === "L3") targetIds = l3;
+    else targetIds = [...l1, ...l2, ...l3];
+
+    const createdAtFilter = {};
+    if (dateFrom || dateTo) {
+      createdAtFilter.createdAt = {};
+      if (dateFrom) createdAtFilter.createdAt.$gte = parseISTDate(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.createdAt.$lte = end;
+      }
+    }
+    const hasDateFilter = Object.keys(createdAtFilter).length > 0;
+
+    const [depositStats, withdrawalStats, firstDepositStats] = await Promise.all([
+      DepositOrder.aggregate([
+        { $match: { userId: { $in: targetIds }, ...createdAtFilter } },
+        { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+      ]),
+      WithdrawalOrder.aggregate([
+        { $match: { userId: { $in: targetIds }, ...createdAtFilter } },
+        { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+      ]),
+      DepositOrder.aggregate([
+        { $match: { userId: { $in: targetIds }, status: "SUCCESS" } },
+        { $sort: { createdAt: 1 } },
+        { $group: { _id: "$userId", amount: { $first: "$amount" }, date: { $first: "$createdAt" } } },
+        ...(hasDateFilter ? [{ $match: { date: { $gte: createdAtFilter.createdAt.$gte, $lte: createdAtFilter.createdAt.$lte } } }] : []),
+        { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const depositStatuses = { totalAmount: 0, totalCount: 0 };
+    for (const d of depositStats) {
+      depositStatuses[d._id] = { amount: d.total, count: d.count };
+      depositStatuses.totalAmount += d.total;
+      depositStatuses.totalCount += d.count;
+    }
+
+    const withdrawalStatuses = { totalAmount: 0, totalCount: 0 };
+    for (const w of withdrawalStats) {
+      withdrawalStatuses[w._id] = { amount: w.total, count: w.count };
+      withdrawalStatuses.totalAmount += w.total;
+      withdrawalStatuses.totalCount += w.count;
+    }
+
+    res.json({
+      status: "success",
+      userId: idNum,
+      team: { l1: l1.length, l2: l2.length, l3: l3.length, total: l1.length + l2.length + l3.length },
+      firstDeposit: firstDepositStats[0] ? { count: firstDepositStats[0].count, totalAmount: firstDepositStats[0].totalAmount } : { count: 0, totalAmount: 0 },
+      deposits: depositStatuses,
+      withdrawals: withdrawalStatuses,
+    });
+  } catch (error) {
+    logger.error(error, { where: "getUserTeamStats", query: req.query });
+    res.status(500).json({ msg: error.message });
+  }
+}
+
 async function searchUserFull(req, res) {
   const { userId } = req.query;
   const idNum = Number(userId);
@@ -1236,6 +1322,7 @@ export default {
   getWithdrawalConfig,
   updateWithdrawalConfig,
   searchUserFull,
+  getUserTeamStats,
   getDepositConfig,
   updateDepositConfig,
   getDepositBonusConfig,
