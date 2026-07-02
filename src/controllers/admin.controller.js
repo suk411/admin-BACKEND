@@ -1186,11 +1186,8 @@ async function getUserTeamStats(req, res) {
       else if (len >= 3 && p[len - 3] === idNum) l3.push(m.userId);
     }
 
-    let targetIds;
-    if (tier === "L1") targetIds = l1;
-    else if (tier === "L2") targetIds = l2;
-    else if (tier === "L3") targetIds = l3;
-    else targetIds = [...l1, ...l2, ...l3];
+    const tiers = { l1, l2, l3 };
+    const tierKeys = ["l1", "l2", "l3"];
 
     const createdAtFilter = {};
     if (dateFrom || dateTo) {
@@ -1204,48 +1201,176 @@ async function getUserTeamStats(req, res) {
     }
     const hasDateFilter = Object.keys(createdAtFilter).length > 0;
 
-    const [depositStats, withdrawalStats, firstDepositStats] = await Promise.all([
-      DepositOrder.aggregate([
-        { $match: { userId: { $in: targetIds }, ...createdAtFilter } },
-        { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
-      WithdrawalOrder.aggregate([
-        { $match: { userId: { $in: targetIds }, ...createdAtFilter } },
-        { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
-      DepositOrder.aggregate([
-        { $match: { userId: { $in: targetIds }, status: "SUCCESS" } },
-        { $sort: { createdAt: 1 } },
-        { $group: { _id: "$userId", amount: { $first: "$amount" }, date: { $first: "$createdAt" } } },
-        ...(hasDateFilter ? [{ $match: { date: { $gte: createdAtFilter.createdAt.$gte, $lte: createdAtFilter.createdAt.$lte } } }] : []),
-        { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
-      ]),
+    const [depositResults, withdrawalResults, firstDepositResults] = await Promise.all([
+      Promise.all(tierKeys.map((t) =>
+        tiers[t].length > 0
+          ? DepositOrder.aggregate([
+              { $match: { userId: { $in: tiers[t] }, ...createdAtFilter } },
+              { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+            ])
+          : Promise.resolve([]),
+      )),
+      Promise.all(tierKeys.map((t) =>
+        tiers[t].length > 0
+          ? WithdrawalOrder.aggregate([
+              { $match: { userId: { $in: tiers[t] }, ...createdAtFilter } },
+              { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+            ])
+          : Promise.resolve([]),
+      )),
+      Promise.all(tierKeys.map((t) =>
+        tiers[t].length > 0
+          ? DepositOrder.aggregate([
+              { $match: { userId: { $in: tiers[t] }, status: "SUCCESS" } },
+              { $sort: { createdAt: 1 } },
+              { $group: { _id: "$userId", amount: { $first: "$amount" }, date: { $first: "$createdAt" } } },
+              ...(hasDateFilter ? [{ $match: { date: { $gte: createdAtFilter.createdAt.$gte, $lte: createdAtFilter.createdAt.$lte } } }] : []),
+              { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
+            ])
+          : Promise.resolve([]),
+      )),
     ]);
 
-    const depositStatuses = { totalAmount: 0, totalCount: 0 };
-    for (const d of depositStats) {
-      depositStatuses[d._id] = { amount: d.total, count: d.count };
-      depositStatuses.totalAmount += d.total;
-      depositStatuses.totalCount += d.count;
-    }
+    const deposits = {};
+    const withdrawals = {};
+    const firstDeposit = {};
+    for (let i = 0; i < 3; i++) {
+      const t = tierKeys[i];
 
-    const withdrawalStatuses = { totalAmount: 0, totalCount: 0 };
-    for (const w of withdrawalStats) {
-      withdrawalStatuses[w._id] = { amount: w.total, count: w.count };
-      withdrawalStatuses.totalAmount += w.total;
-      withdrawalStatuses.totalCount += w.count;
+      const d = { totalAmount: 0, totalCount: 0 };
+      for (const s of depositResults[i]) {
+        d[s._id] = { amount: s.total, count: s.count };
+        d.totalAmount += s.total;
+        d.totalCount += s.count;
+      }
+      deposits[t] = d;
+
+      const w = { totalAmount: 0, totalCount: 0 };
+      for (const s of withdrawalResults[i]) {
+        w[s._id] = { amount: s.total, count: s.count };
+        w.totalAmount += s.total;
+        w.totalCount += s.count;
+      }
+      withdrawals[t] = w;
+
+      firstDeposit[t] = firstDepositResults[i][0]
+        ? { count: firstDepositResults[i][0].count, totalAmount: firstDepositResults[i][0].totalAmount }
+        : { count: 0, totalAmount: 0 };
     }
 
     res.json({
       status: "success",
       userId: idNum,
       team: { l1: l1.length, l2: l2.length, l3: l3.length, total: l1.length + l2.length + l3.length },
-      firstDeposit: firstDepositStats[0] ? { count: firstDepositStats[0].count, totalAmount: firstDepositStats[0].totalAmount } : { count: 0, totalAmount: 0 },
-      deposits: depositStatuses,
-      withdrawals: withdrawalStatuses,
+      firstDeposit,
+      deposits,
+      withdrawals,
     });
   } catch (error) {
     logger.error(error, { where: "getUserTeamStats", query: req.query });
+    res.status(500).json({ msg: error.message });
+  }
+}
+
+async function getUserTeamMembers(req, res) {
+  try {
+    const { userId, tier, search, page = 1, limit = 50, dateFrom, dateTo } = req.query;
+    const idNum = Number(userId);
+    if (!userId || Number.isNaN(idNum)) {
+      return res.status(400).json({ msg: "Invalid or missing userId" });
+    }
+
+    const user = await userModel.findOne({ userId: idNum }).select("userId").lean();
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const teamMembers = await userModel.find({ path: idNum }).select("userId path createdAt").lean();
+
+    const l1 = [], l2 = [], l3 = [];
+    for (const m of teamMembers) {
+      const p = m.path;
+      const len = p.length;
+      if (len >= 1 && p[len - 1] === idNum) l1.push(m);
+      else if (len >= 2 && p[len - 2] === idNum) l2.push(m);
+      else if (len >= 3 && p[len - 3] === idNum) l3.push(m);
+    }
+
+    let selected;
+    if (tier === "L1") selected = l1;
+    else if (tier === "L2") selected = l2;
+    else if (tier === "L3") selected = l3;
+    else selected = [...l1, ...l2, ...l3];
+
+    if (search) {
+      const searchNum = Number(search);
+      if (!Number.isNaN(searchNum)) {
+        selected = selected.filter((m) => m.userId === searchNum);
+      }
+    }
+
+    if (dateFrom || dateTo) {
+      const from = dateFrom ? parseISTDate(dateFrom) : new Date(0);
+      const to = dateTo ? (() => { const d = new Date(dateTo); d.setHours(23, 59, 59, 999); return d; })() : new Date(864e13);
+      selected = selected.filter((m) => m.createdAt >= from && m.createdAt <= to);
+    }
+
+    const pg = Math.max(1, Number(page) || 1);
+    const lm = Math.max(1, Math.min(100, Number(limit) || 50));
+    const total = selected.length;
+    const skip = (pg - 1) * lm;
+    const pageItems = selected.slice(skip, skip + lm);
+    const pageIds = pageItems.map((m) => m.userId);
+
+    const levelMap = {};
+    for (const m of l1) levelMap[m.userId] = "L1";
+    for (const m of l2) levelMap[m.userId] = "L2";
+    for (const m of l3) levelMap[m.userId] = "L3";
+
+    if (pageIds.length === 0) {
+      return res.json({ status: "success", userId: idNum, total, page: pg, limit: lm, items: [] });
+    }
+
+    const [depositData, withdrawalData, accounts, paymentMethods, ipData] = await Promise.all([
+      DepositOrder.aggregate([
+        { $match: { userId: { $in: pageIds }, status: "SUCCESS" } },
+        { $group: { _id: "$userId", total: { $sum: "$amount" } } },
+      ]),
+      WithdrawalOrder.aggregate([
+        { $match: { userId: { $in: pageIds }, status: "SUCCESS" } },
+        { $group: { _id: "$userId", total: { $sum: "$amount" } } },
+      ]),
+      accountModel.find({ user: { $in: pageIds } }).select("user balance").lean(),
+      PaymentMethod.find({ userId: { $in: pageIds } }).select("userId").lean(),
+      DeviceLog.aggregate([
+        { $match: { userId: { $in: pageIds } } },
+        { $group: { _id: "$userId", ips: { $addToSet: "$ip" } } },
+        { $project: { _id: 1, ipCount: { $size: "$ips" } } },
+      ]),
+    ]);
+
+    const depositMap = {};
+    for (const d of depositData) depositMap[d._id] = d.total;
+    const withdrawalMap = {};
+    for (const w of withdrawalData) withdrawalMap[w._id] = w.total;
+    const balanceMap = {};
+    for (const a of accounts) balanceMap[a.user] = a.balance;
+    const paymentSet = new Set(paymentMethods.map((p) => p.userId));
+    const ipMap = {};
+    for (const i of ipData) ipMap[i._id] = i.ipCount;
+
+    const items = pageItems.map((m) => ({
+      userId: m.userId,
+      registeredAt: m.createdAt,
+      level: levelMap[m.userId],
+      totalDeposit: depositMap[m.userId] || 0,
+      totalWithdrawal: withdrawalMap[m.userId] || 0,
+      balance: balanceMap[m.userId] ?? 0,
+      bindBank: paymentSet.has(m.userId),
+      multipleIp: (ipMap[m.userId] || 0) > 1,
+    }));
+
+    res.json({ status: "success", userId: idNum, total, page: pg, limit: lm, items });
+  } catch (error) {
+    logger.error(error, { where: "getUserTeamMembers", query: req.query });
     res.status(500).json({ msg: error.message });
   }
 }
@@ -1323,6 +1448,7 @@ export default {
   updateWithdrawalConfig,
   searchUserFull,
   getUserTeamStats,
+  getUserTeamMembers,
   getDepositConfig,
   updateDepositConfig,
   getDepositBonusConfig,
