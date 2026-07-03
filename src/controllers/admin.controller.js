@@ -1423,6 +1423,104 @@ async function searchUserFull(req, res) {
   }
 }
 
+async function getGameAllBets(req, res) {
+  try {
+    const member = req.query.member?.trim();
+    if (!member) {
+      return res.status(400).json({ status: "failed", msg: "member query param is required" });
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
+
+    const query = { member: member.toLowerCase() };
+
+    if (req.query.site) {
+      query.site = req.query.site;
+    }
+
+    if (req.query.status) {
+      query.status = Number(req.query.status);
+    }
+
+    if (req.query.dateFrom || req.query.dateTo) {
+      query.settleTime = {};
+      if (req.query.dateFrom) query.settleTime.$gte = parseISTDate(req.query.dateFrom);
+      if (req.query.dateTo) query.settleTime.$lte = parseISTDateEnd(req.query.dateTo);
+    }
+
+    const projection = { _id: 0, bet: 1, payout: 1, turnover: 1, gameId: 1, site: 1, product: 1, betTime: 1, settleTime: 1, createdAt: 1 };
+
+    const [items, total] = await Promise.all([
+      BetRecord.find(query, projection).sort({ settleTime: -1 }).skip(skip).limit(limit).lean(),
+      BetRecord.countDocuments(query),
+    ]);
+
+    let totalBet = 0, totalPayout = 0, totalTurnover = 0;
+    for (let i = 0; i < items.length; i++) {
+      totalBet += items[i].bet;
+      totalPayout += items[i].payout;
+      totalTurnover += items[i].turnover;
+    }
+
+    res.json({ status: "success", member, page, limit, total, summary: { totalBet, totalPayout, totalTurnover, netPnl: totalPayout - totalBet }, items });
+  } catch (error) {
+    logger.error(error, { where: "getGameAllBets", query: req.query });
+    res.status(500).json({ status: "failed", msg: "Failed to get all bets", error: error.message });
+  }
+}
+
+async function getWingoAllBets(req, res) {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
+    const query = {};
+
+    if (req.query.userId) query.userId = req.query.userId;
+    if (req.query.issueNumber) query.issueNumber = req.query.issueNumber;
+    if (req.query.gameMode) query.gameMode = req.query.gameMode;
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.orderNumber) query.orderNumber = req.query.orderNumber;
+
+    if (req.query.dateFrom || req.query.dateTo) {
+      query.createdAt = {};
+      if (req.query.dateFrom) query.createdAt.$gte = parseISTDate(req.query.dateFrom);
+      if (req.query.dateTo) query.createdAt.$lte = parseISTDateEnd(req.query.dateTo);
+    }
+
+    const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, fee: 1, selectType: 1, status: 1, result: 1, gameMode: 1, createdAt: 1 };
+
+    const [items, total] = await Promise.all([
+      WingoBet.find(query, projection).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      WingoBet.countDocuments(query),
+    ]);
+
+    const userIds = [...new Set(items.map((i) => Number(i.userId)).filter((n) => !Number.isNaN(n)))];
+    let mobileMap = {};
+    if (userIds.length > 0) {
+      const users = await userModel.find({ userId: { $in: userIds } }).select("userId mobile").lean();
+      for (const u of users) mobileMap[u.userId] = u.mobile;
+    }
+
+    let totalBet = 0, totalPayout = 0, wonCount = 0, lostCount = 0;
+    for (let i = 0; i < items.length; i++) {
+      totalBet += items[i].betAmount;
+      const profit = items[i].result?.profitAmount || 0;
+      totalPayout += profit;
+      if (items[i].status === "won") wonCount++;
+      else if (items[i].status === "lost") lostCount++;
+      items[i].mobile = mobileMap[Number(items[i].userId)] || null;
+    }
+
+    res.json({ status: "success", page, limit, total, summary: { totalBet, totalPayout, wonCount, lostCount }, items });
+  } catch (error) {
+    logger.error(error, { where: "getWingoAllBets", query: req.query });
+    res.status(500).json({ status: "failed", msg: "Failed to get all bets", error: error.message });
+  }
+}
+
 async function getUserBetDailyStats(req, res) {
   try {
     const { userId, dateFrom, dateTo, page = 1, limit = 31 } = req.query;
@@ -1533,4 +1631,6 @@ export default {
   getDepositBonusConfig,
   updateDepositBonusConfig,
   getUserBetDailyStats,
+  getGameAllBets,
+  getWingoAllBets,
 };
