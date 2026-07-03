@@ -1436,13 +1436,8 @@ async function getGameAllBets(req, res) {
 
     const query = { member: member.toLowerCase() };
 
-    if (req.query.site) {
-      query.site = req.query.site;
-    }
-
-    if (req.query.status) {
-      query.status = Number(req.query.status);
-    }
+    if (req.query.site) query.site = req.query.site;
+    if (req.query.status) query.status = Number(req.query.status);
 
     if (req.query.dateFrom || req.query.dateTo) {
       query.settleTime = {};
@@ -1450,21 +1445,34 @@ async function getGameAllBets(req, res) {
       if (req.query.dateTo) query.settleTime.$lte = parseISTDateEnd(req.query.dateTo);
     }
 
-    const projection = { _id: 0, bet: 1, payout: 1, turnover: 1, gameId: 1, site: 1, product: 1, betTime: 1, settleTime: 1, createdAt: 1 };
+    const projection = { _id: 0, bet: 1, payout: 1, turnover: 1, gameId: 1, site: 1, product: 1, member: 1, settleTime: 1, createdAt: 1 };
 
-    const [items, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       BetRecord.find(query, projection).sort({ settleTime: -1 }).skip(skip).limit(limit).lean(),
       BetRecord.countDocuments(query),
     ]);
 
-    let totalBet = 0, totalPayout = 0, totalTurnover = 0;
-    for (let i = 0; i < items.length; i++) {
-      totalBet += items[i].bet;
-      totalPayout += items[i].payout;
-      totalTurnover += items[i].turnover;
-    }
+    const userId = Number(member.replace(/^u/i, ""));
+    let totalAmount = 0, totalPayout = 0;
+    const data = raw.map((r) => {
+      totalAmount += r.bet;
+      totalPayout += r.payout;
+      return {
+        userId: Number.isNaN(userId) ? null : userId,
+        game: r.site,
+        amount: r.bet,
+        payout: r.payout,
+        turnover: r.turnover,
+        gameId: r.gameId,
+        product: r.product,
+        member: r.member,
+        status: r.status,
+        settleTime: toISTString(new Date(r.settleTime)),
+        createdAt: r.createdAt,
+      };
+    });
 
-    res.json({ status: "success", member, page, limit, total, summary: { totalBet, totalPayout, totalTurnover, netPnl: totalPayout - totalBet }, items });
+    res.json({ status: "success", total, page, limit, data, summary: { totalAmount, totalPayout } });
   } catch (error) {
     logger.error(error, { where: "getGameAllBets", query: req.query });
     res.status(500).json({ status: "failed", msg: "Failed to get all bets", error: error.message });
@@ -1479,10 +1487,6 @@ async function getWingoAllBets(req, res) {
     const query = {};
 
     if (req.query.userId) query.userId = req.query.userId;
-    if (req.query.issueNumber) query.issueNumber = req.query.issueNumber;
-    if (req.query.gameMode) query.gameMode = req.query.gameMode;
-    if (req.query.status) query.status = req.query.status;
-    if (req.query.orderNumber) query.orderNumber = req.query.orderNumber;
 
     if (req.query.dateFrom || req.query.dateTo) {
       query.createdAt = {};
@@ -1492,30 +1496,43 @@ async function getWingoAllBets(req, res) {
 
     const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, realAmount: 1, fee: 1, selectType: 1, status: 1, result: 1, gameMode: 1, createdAt: 1 };
 
-    const [items, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       WingoBet.find(query, projection).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       WingoBet.countDocuments(query),
     ]);
 
-    const userIds = [...new Set(items.map((i) => Number(i.userId)).filter((n) => !Number.isNaN(n)))];
+    const userIds = [...new Set(raw.map((i) => Number(i.userId)).filter((n) => !Number.isNaN(n)))];
     let mobileMap = {};
     if (userIds.length > 0) {
       const users = await userModel.find({ userId: { $in: userIds } }).select("userId mobile").lean();
       for (const u of users) mobileMap[u.userId] = u.mobile;
     }
 
-    let totalBet = 0, totalPayout = 0, wonCount = 0, lostCount = 0;
-    for (let i = 0; i < items.length; i++) {
-      totalBet += items[i].betAmount;
-      const profit = items[i].result?.profitAmount || 0;
+    let totalAmount = 0, totalPayout = 0;
+    const data = raw.map((r) => {
+      const profit = r.result?.profitAmount || 0;
+      totalAmount += r.betAmount;
       totalPayout += profit;
-      if (items[i].status === "won") wonCount++;
-      else if (items[i].status === "lost") lostCount++;
-      items[i].mobile = mobileMap[Number(items[i].userId)] || null;
-      items[i].timestamp = toISTString(new Date(items[i].createdAt));
-    }
+      return {
+        userId: r.userId,
+        game: "wingo",
+        gameMode: r.gameMode,
+        amount: r.betAmount,
+        realAmount: r.realAmount,
+        fee: r.fee,
+        payout: profit,
+        selectType: r.selectType,
+        issueNumber: r.issueNumber,
+        orderNumber: r.orderNumber,
+        result: r.result ? { number: r.result.number, colour: r.result.colour, profitAmount: r.result.profitAmount } : null,
+        status: r.status,
+        mobile: mobileMap[Number(r.userId)] || null,
+        settleTime: toISTString(new Date(r.createdAt)),
+        createdAt: r.createdAt,
+      };
+    });
 
-    res.json({ status: "success", page, limit, total, summary: { totalBet, totalPayout, wonCount, lostCount }, items });
+    res.json({ status: "success", total, page, limit, data, summary: { totalAmount, totalPayout } });
   } catch (error) {
     logger.error(error, { where: "getWingoAllBets", query: req.query });
     res.status(500).json({ status: "failed", msg: "Failed to get all bets", error: error.message });
@@ -1561,7 +1578,6 @@ async function getUserBetDailyStats(req, res) {
             betCount: { $sum: 1 },
             totalBets: { $sum: "$bet" },
             totalPayout: { $sum: "$payout" },
-            netPL: { $sum: { $subtract: ["$bet", "$payout"] } },
           },
         },
         { $sort: { _id: -1 } },
@@ -1569,7 +1585,7 @@ async function getUserBetDailyStats(req, res) {
     ]);
 
     const emptyWingo = { betCount: 0, totalBets: 0, totalPayout: 0, wonCount: 0, lostCount: 0 };
-    const emptyProvider = { betCount: 0, totalBets: 0, totalPayout: 0, netPL: 0 };
+    const emptyProvider = { betCount: 0, totalBets: 0, totalPayout: 0 };
 
     const dateMap = {};
     for (const d of wingoDaily) {
@@ -1577,9 +1593,9 @@ async function getUserBetDailyStats(req, res) {
     }
     for (const d of providerDaily) {
       if (dateMap[d._id]) {
-        dateMap[d._id].provider = { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, netPL: d.netPL };
+        dateMap[d._id].provider = { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout };
       } else {
-        dateMap[d._id] = { date: d._id, wingo: { ...emptyWingo }, provider: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, netPL: d.netPL } };
+        dateMap[d._id] = { date: d._id, wingo: { ...emptyWingo }, provider: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout } };
       }
     }
 
