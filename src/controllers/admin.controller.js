@@ -1445,7 +1445,7 @@ async function getGameAllBets(req, res) {
       if (req.query.dateTo) query.settleTime.$lte = parseISTDateEnd(req.query.dateTo);
     }
 
-    const projection = { _id: 0, bet: 1, payout: 1, turnover: 1, gameId: 1, site: 1, product: 1, member: 1, settleTime: 1, createdAt: 1 };
+    const projection = { _id: 0, bet: 1, payout: 1, gameId: 1, site: 1, product: 1, status: 1, settleTime: 1, createdAt: 1 };
 
     const [raw, total] = await Promise.all([
       BetRecord.find(query, projection).sort({ settleTime: -1 }).skip(skip).limit(limit).lean(),
@@ -1462,10 +1462,8 @@ async function getGameAllBets(req, res) {
         game: r.site,
         amount: r.bet,
         payout: r.payout,
-        turnover: r.turnover,
         gameId: r.gameId,
         product: r.product,
-        member: r.member,
         status: r.status,
         settleTime: toISTString(new Date(r.settleTime)),
         createdAt: r.createdAt,
