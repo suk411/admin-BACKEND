@@ -1255,8 +1255,8 @@ async function getUserTeamStats(req, res) {
       withdrawals[t] = w;
 
       firstDeposit[t] = firstDepositResults[i][0]
-        ? { count: firstDepositResults[i][0].count, totalAmount: firstDepositResults[i][0].totalAmount }
-        : { count: 0, totalAmount: 0 };
+        ? { totalAmount: firstDepositResults[i][0].totalAmount }
+        : { totalAmount: 0 };
     }
 
     res.json({
