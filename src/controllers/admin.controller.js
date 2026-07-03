@@ -14,7 +14,7 @@ import DeviceLog from "../models/deviceLog.model.js";
 import BetRecord from "../models/betRecord.model.js";
 import WingoBet from "../models/wingoBet.model.js";
 import WithdrawalConfig from "../models/withdrawalConfig.model.js";
-import { parseISTDate, parseISTDateEnd, toISTDate } from "../utils/time.js";
+import { parseISTDate, parseISTDateEnd, toISTDate, toISTString } from "../utils/time.js";
 import { calculateBetBalances } from "../services/betCalculation.service.js";
 import { buildUsername, buildPassword, buildReferenceId, resolveProviderCode, ensureProviderMember, makeTransfer, getGameBalance } from "../services/gameProvider.service.js";
 import {
@@ -1490,7 +1490,7 @@ async function getWingoAllBets(req, res) {
       if (req.query.dateTo) query.createdAt.$lte = parseISTDateEnd(req.query.dateTo);
     }
 
-    const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, fee: 1, selectType: 1, status: 1, result: 1, gameMode: 1, createdAt: 1 };
+    const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, realAmount: 1, fee: 1, selectType: 1, status: 1, result: 1, gameMode: 1, createdAt: 1 };
 
     const [items, total] = await Promise.all([
       WingoBet.find(query, projection).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -1512,6 +1512,7 @@ async function getWingoAllBets(req, res) {
       if (items[i].status === "won") wonCount++;
       else if (items[i].status === "lost") lostCount++;
       items[i].mobile = mobileMap[Number(items[i].userId)] || null;
+      items[i].timestamp = toISTString(new Date(items[i].createdAt));
     }
 
     res.json({ status: "success", page, limit, total, summary: { totalBet, totalPayout, wonCount, lostCount }, items });
