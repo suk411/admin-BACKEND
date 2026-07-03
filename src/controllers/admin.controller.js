@@ -1430,6 +1430,12 @@ async function getGameAllBets(req, res) {
       return res.status(400).json({ status: "failed", msg: "member query param is required" });
     }
 
+    const userIdNum = Number(member.replace(/^u/i, ""));
+    if (!Number.isNaN(userIdNum)) {
+      const user = await userModel.findOne({ userId: userIdNum }).select("userId").lean();
+      if (!user) return res.status(404).json({ msg: "User not found" });
+    }
+
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
     const skip = (page - 1) * limit;
@@ -1452,13 +1458,12 @@ async function getGameAllBets(req, res) {
       BetRecord.countDocuments(query),
     ]);
 
-    const userId = Number(member.replace(/^u/i, ""));
     let totalAmount = 0, totalPayout = 0;
     const data = raw.map((r) => {
       totalAmount += r.bet;
       totalPayout += r.payout;
       return {
-        userId: Number.isNaN(userId) ? null : userId,
+        userId: Number.isNaN(userIdNum) ? null : userIdNum,
         game: r.site,
         amount: r.bet,
         payout: r.payout,
@@ -1484,7 +1489,11 @@ async function getWingoAllBets(req, res) {
     const skip = (page - 1) * limit;
     const query = {};
 
-    if (req.query.userId) query.userId = req.query.userId;
+    if (req.query.userId) {
+      const user = await userModel.findOne({ userId: req.query.userId }).select("userId").lean();
+      if (!user) return res.status(404).json({ msg: "User not found" });
+      query.userId = req.query.userId;
+    }
 
     if (req.query.dateFrom || req.query.dateTo) {
       query.createdAt = {};
@@ -1534,6 +1543,9 @@ async function getUserBetDailyStats(req, res) {
     if (!userId || Number.isNaN(idNum)) {
       return res.status(400).json({ msg: "Invalid or missing userId" });
     }
+
+    const user = await userModel.findOne({ userId: idNum }).select("userId").lean();
+    if (!user) return res.status(404).json({ msg: "User not found" });
 
     const p = Math.max(1, Number(page));
     const l = Math.max(1, Math.min(365, Number(limit)));
