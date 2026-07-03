@@ -12,8 +12,9 @@ import VipConfig, { ensureDefaultVipConfig } from "../models/vipConfig.model.js"
 import DepositConfig, { ensureDefaultDepositConfigs } from "../models/depositConfig.model.js";
 import DeviceLog from "../models/deviceLog.model.js";
 import BetRecord from "../models/betRecord.model.js";
+import WingoBet from "../models/wingoBet.model.js";
 import WithdrawalConfig from "../models/withdrawalConfig.model.js";
-import { parseISTDate } from "../utils/time.js";
+import { parseISTDate, parseISTDateEnd, toISTDate } from "../utils/time.js";
 import { calculateBetBalances } from "../services/betCalculation.service.js";
 import { buildUsername, buildPassword, buildReferenceId, resolveProviderCode, ensureProviderMember, makeTransfer, getGameBalance } from "../services/gameProvider.service.js";
 import {
@@ -1422,6 +1423,79 @@ async function searchUserFull(req, res) {
   }
 }
 
+async function getUserBetDailyStats(req, res) {
+  try {
+    const { userId, dateFrom, dateTo, page = 1, limit = 31 } = req.query;
+    const idNum = Number(userId);
+    if (!userId || Number.isNaN(idNum)) {
+      return res.status(400).json({ msg: "Invalid or missing userId" });
+    }
+
+    const p = Math.max(1, Number(page));
+    const l = Math.max(1, Math.min(365, Number(limit)));
+
+    const todayStr = toISTDate(new Date());
+    const fromDate = dateFrom ? parseISTDate(dateFrom) : parseISTDate(todayStr);
+    const toDate = dateTo ? parseISTDateEnd(dateTo) : parseISTDateEnd(todayStr);
+    const dateFilter = { $gte: fromDate, $lte: toDate };
+
+    const [wingoDaily, providerDaily] = await Promise.all([
+      WingoBet.aggregate([
+        { $match: { userId: String(idNum), createdAt: dateFilter } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "Asia/Kolkata" } },
+            betCount: { $sum: 1 },
+            totalBets: { $sum: "$betAmount" },
+            totalPayout: { $sum: { $ifNull: ["$result.profitAmount", 0] } },
+            wonCount: { $sum: { $cond: [{ $eq: ["$status", "won"] }, 1, 0] } },
+            lostCount: { $sum: { $cond: [{ $eq: ["$status", "lost"] }, 1, 0] } },
+          },
+        },
+        { $sort: { _id: -1 } },
+      ]),
+      BetRecord.aggregate([
+        { $match: { member: `u${idNum}`, settleTime: dateFilter } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$settleTime", timezone: "Asia/Kolkata" } },
+            betCount: { $sum: 1 },
+            totalBets: { $sum: "$bet" },
+            totalPayout: { $sum: "$payout" },
+            netPL: { $sum: { $subtract: ["$bet", "$payout"] } },
+          },
+        },
+        { $sort: { _id: -1 } },
+      ]),
+    ]);
+
+    const emptyWingo = { betCount: 0, totalBets: 0, totalPayout: 0, wonCount: 0, lostCount: 0 };
+    const emptyProvider = { betCount: 0, totalBets: 0, totalPayout: 0, netPL: 0 };
+
+    const dateMap = {};
+    for (const d of wingoDaily) {
+      dateMap[d._id] = { date: d._id, wingo: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, wonCount: d.wonCount, lostCount: d.lostCount }, provider: { ...emptyProvider } };
+    }
+    for (const d of providerDaily) {
+      if (dateMap[d._id]) {
+        dateMap[d._id].provider = { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, netPL: d.netPL };
+      } else {
+        dateMap[d._id] = { date: d._id, wingo: { ...emptyWingo }, provider: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, netPL: d.netPL } };
+      }
+    }
+
+    const allDates = Object.values(dateMap).sort((a, b) => b.date.localeCompare(a.date));
+    const total = allDates.length;
+    const skip = (p - 1) * l;
+    const items = allDates.slice(skip, skip + l);
+
+    res.json({ status: "success", userId: idNum, total, page: p, limit: l, data: items });
+  } catch (error) {
+    logger.error(error, { where: "getUserBetDailyStats", query: req.query });
+    res.status(500).json({ msg: error.message });
+  }
+}
+
 export default {
   createAdminTransaction,
   getAdminDashboard,
@@ -1458,4 +1532,5 @@ export default {
   updateDepositConfig,
   getDepositBonusConfig,
   updateDepositBonusConfig,
+  getUserBetDailyStats,
 };

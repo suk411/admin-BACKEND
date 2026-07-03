@@ -65,6 +65,9 @@ router.put("/agency-levels/:level", adminController.updateAgencyLevelConfig);
 router.get("/agent/team-stats", adminController.getUserTeamStats);
 router.get("/agent/team-members", adminController.getUserTeamMembers);
 
+// Bet daily stats
+router.get("/bets/daily-stats", adminController.getUserBetDailyStats);
+
 // Gift codes
 router.post("/gift-codes", giftCodeController.createGiftCode);
 router.get("/gift-codes", giftCodeController.listGiftCodes);
