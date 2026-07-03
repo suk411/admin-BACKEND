@@ -1515,7 +1515,6 @@ async function getWingoAllBets(req, res) {
       totalPayout += profit;
       return {
         userId: r.userId,
-        game: "wingo",
         gameMode: r.gameMode,
         amount: r.betAmount,
         realAmount: r.realAmount,
@@ -1524,7 +1523,6 @@ async function getWingoAllBets(req, res) {
         selectType: r.selectType,
         issueNumber: r.issueNumber,
         orderNumber: r.orderNumber,
-        result: r.result ? { number: r.result.number, colour: r.result.colour, profitAmount: r.result.profitAmount } : null,
         status: r.status,
         mobile: mobileMap[Number(r.userId)] || null,
         settleTime: toISTString(new Date(r.createdAt)),
