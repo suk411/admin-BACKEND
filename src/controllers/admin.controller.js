@@ -1501,13 +1501,6 @@ async function getWingoAllBets(req, res) {
       WingoBet.countDocuments(query),
     ]);
 
-    const userIds = [...new Set(raw.map((i) => Number(i.userId)).filter((n) => !Number.isNaN(n)))];
-    let mobileMap = {};
-    if (userIds.length > 0) {
-      const users = await userModel.find({ userId: { $in: userIds } }).select("userId mobile").lean();
-      for (const u of users) mobileMap[u.userId] = u.mobile;
-    }
-
     let totalAmount = 0, totalPayout = 0;
     const data = raw.map((r) => {
       const profit = r.result?.profitAmount || 0;
@@ -1524,7 +1517,6 @@ async function getWingoAllBets(req, res) {
         issueNumber: r.issueNumber,
         orderNumber: r.orderNumber,
         status: r.status,
-        mobile: mobileMap[Number(r.userId)] || null,
         settleTime: toISTString(new Date(r.createdAt)),
         createdAt: r.createdAt,
       };
