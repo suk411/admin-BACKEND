@@ -1,7 +1,7 @@
 import AgencyLevelConfig from "../models/agencyLevelConfig.model.js";
 import AgencyLevel from "../models/agencyLevel.model.js";
-import AgencyDailyTally from "../models/agencyDailyTally.model.js";
 import AgencyCommission from "../models/agencyCommission.model.js";
+import DailyGameStats from "../models/dailyGameStats.model.js";
 import userModel from "../models/user.model.js";
 import accountModel from "../models/account.model.js";
 import transactionLedgerModel from "../models/transactionLedger.model.js";
@@ -59,15 +59,31 @@ export async function incrementDepositTally(userId, depositAmount, isFirstDeposi
   if (!path) return;
   const { l1, l2, l3 } = getAncestors(path);
   const today = todayDate();
-  const ops = [];
-  const inc = { l1Deposit: depositAmount, l1DepositCount: 1 };
-  if (isFirstDeposit) { inc.l1FirstDepositCount = 1; inc.l1FirstDepositAmount = depositAmount; }
-  if (l1) ops.push({ updateOne: { filter: { userId: l1, date: today }, update: { $inc: inc }, upsert: true } });
-  const inc2 = { l2Deposit: depositAmount, l2DepositCount: 1 };
-  if (isFirstDeposit) { inc2.l2FirstDepositCount = 1; inc2.l2FirstDepositAmount = depositAmount; }
-  if (l2) ops.push({ updateOne: { filter: { userId: l2, date: today }, update: { $inc: inc2 }, upsert: true } });
-  const inc3 = { l3Deposit: depositAmount, l3DepositCount: 1 };
-  if (isFirstDeposit) { inc3.l3FirstDepositCount = 1; inc3.l3FirstDepositAmount = depositAmount; }
-  if (l3) ops.push({ updateOne: { filter: { userId: l3, date: today }, update: { $inc: inc3 }, upsert: true } });
-  if (ops.length > 0) await AgencyDailyTally.bulkWrite(ops);
+  const inc = {};
+  if (l1) {
+    inc[`agents.${l1}.l1Deposit`] = depositAmount;
+    inc[`agents.${l1}.l1DepositCount`] = 1;
+    if (isFirstDeposit) {
+      inc[`agents.${l1}.l1FirstDepositCount`] = 1;
+      inc[`agents.${l1}.l1FirstDepositAmount`] = depositAmount;
+    }
+  }
+  if (l2) {
+    inc[`agents.${l2}.l2Deposit`] = depositAmount;
+    inc[`agents.${l2}.l2DepositCount`] = 1;
+    if (isFirstDeposit) {
+      inc[`agents.${l2}.l2FirstDepositCount`] = 1;
+      inc[`agents.${l2}.l2FirstDepositAmount`] = depositAmount;
+    }
+  }
+  if (l3) {
+    inc[`agents.${l3}.l3Deposit`] = depositAmount;
+    inc[`agents.${l3}.l3DepositCount`] = 1;
+    if (isFirstDeposit) {
+      inc[`agents.${l3}.l3FirstDepositCount`] = 1;
+      inc[`agents.${l3}.l3FirstDepositAmount`] = depositAmount;
+    }
+  }
+  if (Object.keys(inc).length === 0) return;
+  await DailyGameStats.updateOne({ date: today }, { $inc: inc, $set: { lastUpdatedAt: new Date() } }, { upsert: true });
 }
