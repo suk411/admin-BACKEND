@@ -1492,7 +1492,7 @@ async function getWingoAllBets(req, res) {
       if (req.query.dateTo) query.createdAt.$lte = parseISTDateEnd(req.query.dateTo);
     }
 
-    const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, realAmount: 1, fee: 1, selectType: 1, status: 1, result: 1, gameMode: 1, createdAt: 1 };
+    const projection = { _id: 0, userId: 1, issueNumber: 1, orderNumber: 1, betAmount: 1, realAmount: 1, fee: 1, selectType: 1, status: 1, "result.profitAmount": 1, gameMode: 1, createdAt: 1 };
 
     const [raw, total] = await Promise.all([
       WingoBet.find(query, projection).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -1550,7 +1550,7 @@ async function getUserBetDailyStats(req, res) {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "Asia/Kolkata" } },
             betCount: { $sum: 1 },
-            totalBets: { $sum: "$betAmount" },
+            totalAmount: { $sum: "$betAmount" },
             totalPayout: { $sum: { $ifNull: ["$result.profitAmount", 0] } },
             wonCount: { $sum: { $cond: [{ $eq: ["$status", "won"] }, 1, 0] } },
             lostCount: { $sum: { $cond: [{ $eq: ["$status", "lost"] }, 1, 0] } },
@@ -1564,7 +1564,7 @@ async function getUserBetDailyStats(req, res) {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$settleTime", timezone: "Asia/Kolkata" } },
             betCount: { $sum: 1 },
-            totalBets: { $sum: "$bet" },
+            totalAmount: { $sum: "$bet" },
             totalPayout: { $sum: "$payout" },
           },
         },
@@ -1572,18 +1572,18 @@ async function getUserBetDailyStats(req, res) {
       ]),
     ]);
 
-    const emptyWingo = { betCount: 0, totalBets: 0, totalPayout: 0, wonCount: 0, lostCount: 0 };
-    const emptyProvider = { betCount: 0, totalBets: 0, totalPayout: 0 };
+    const emptyWingo = { betCount: 0, totalAmount: 0, totalPayout: 0, wonCount: 0, lostCount: 0 };
+    const emptyProvider = { betCount: 0, totalAmount: 0, totalPayout: 0 };
 
     const dateMap = {};
     for (const d of wingoDaily) {
-      dateMap[d._id] = { date: d._id, wingo: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout, wonCount: d.wonCount, lostCount: d.lostCount }, provider: { ...emptyProvider } };
+      dateMap[d._id] = { date: d._id, wingo: { betCount: d.betCount, totalAmount: d.totalAmount, totalPayout: d.totalPayout, wonCount: d.wonCount, lostCount: d.lostCount }, provider: { ...emptyProvider } };
     }
     for (const d of providerDaily) {
       if (dateMap[d._id]) {
-        dateMap[d._id].provider = { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout };
+        dateMap[d._id].provider = { betCount: d.betCount, totalAmount: d.totalAmount, totalPayout: d.totalPayout };
       } else {
-        dateMap[d._id] = { date: d._id, wingo: { ...emptyWingo }, provider: { betCount: d.betCount, totalBets: d.totalBets, totalPayout: d.totalPayout } };
+        dateMap[d._id] = { date: d._id, wingo: { ...emptyWingo }, provider: { betCount: d.betCount, totalAmount: d.totalAmount, totalPayout: d.totalPayout } };
       }
     }
 

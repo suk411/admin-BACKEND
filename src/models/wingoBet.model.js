@@ -64,5 +64,7 @@ wingoBetSchema.index({ userId: 1, issueNumber: 1 });
 wingoBetSchema.index({ userId: 1, status: 1 });
 wingoBetSchema.index({ issueNumber: 1, userId: 1, selectType: 1 });
 wingoBetSchema.index({ issueNumber: 1, status: 1 });
+wingoBetSchema.index({ createdAt: -1 });
+wingoBetSchema.index({ userId: 1, createdAt: -1 });
 
 export default mongoose.model("WingoBet", wingoBetSchema);
