@@ -105,3 +105,88 @@ Token is obtained from `POST /api/admin/auth/login`.
 | GET | /api/admin/current-round/bets | Bets for current round (paginated) |
 | GET | /api/admin/round-stats/:issueNumber | Round stats by issue number |
 | GET | /api/admin/rounds | Paginated settled rounds with stats |
+
+## Agency Commission
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | /api/admin/agent/agentcomm | View agent commission records (userId, page, limit, dateFrom, dateTo) |
+| POST | /api/admin/agent/runmidnightcalc | Manually trigger midnight commission batch |
+
+---
+
+### Get Agent Commission Records
+
+```
+GET /api/admin/agent/agentcomm?userId=1000&page=1&limit=50&dateFrom=2026-06-01&dateTo=2026-07-04
+```
+
+**Query Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| userId | number | Yes | Agent user ID |
+| page | number | No | Page number (default 1) |
+| limit | number | No | Items per page, max 100 (default 50) |
+| dateFrom | string | No | Filter by date (YYYY-MM-DD), inclusive |
+| dateTo | string | No | Filter by date (YYYY-MM-DD), inclusive |
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "total": 15,
+  "page": 1,
+  "limit": 50,
+  "data": [
+    {
+      "userId": 1000,
+      "date": "2026-07-03T00:00:00.000Z",
+      "rebateLevel": 3,
+      "l1Bets": 125000,
+      "l2Bets": 45000,
+      "l3Bets": 12000,
+      "l1Rate": 0.0075,
+      "l2Rate": 0.0028125,
+      "l3Rate": 0.00105469,
+      "l1Amount": 937.50,
+      "l2Amount": 126.56,
+      "l3Amount": 12.66,
+      "totalAmount": 1076.72,
+      "status": "CREDITED",
+      "creditedAt": "2026-07-04T00:05:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### Run Midnight Commission Batch
+
+```
+POST /api/admin/agent/runmidnightcalc
+```
+
+Triggers `processMidnightBatch` for all `DailyGameStats` records where `commissionProcessed` is not yet true. Credits computed commissions to agent wallets and records `AGENT_COMMISSION` transactions.
+
+**Response (success):**
+
+```json
+{
+  "status": "success",
+  "processed": 1,
+  "totalCommission": 1076.72
+}
+```
+
+**Response (no unprocessed records):**
+
+```json
+{
+  "status": "success",
+  "processed": 0,
+  "totalCommission": 0
+}
+```

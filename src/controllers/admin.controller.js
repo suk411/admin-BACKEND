@@ -8,6 +8,7 @@ import PaymentMethod from "../models/paymentMethod.model.js";
 import { deposit } from "../services/wallet.service.js";
 import { incrementDepositTally, processMidnightBatch } from "../services/agency.service.js";
 import AgencyCommission from "../models/agencyCommission.model.js";
+import DailyGameStats from "../models/dailyGameStats.model.js";
 import logger from "../utils/logger.js";
 import VipConfig, { ensureDefaultVipConfig } from "../models/vipConfig.model.js";
 import DepositConfig, { ensureDefaultDepositConfigs } from "../models/depositConfig.model.js";
@@ -1614,6 +1615,28 @@ async function getUserBetDailyStats(req, res) {
 
 async function adminRunMidnightBatch(req, res) {
   try {
+    const debug = req.query.debug === "true";
+    
+    if (debug) {
+      const allStats = await DailyGameStats.find({}).sort({ date: -1 }).limit(10).lean();
+      const unprocessed = await DailyGameStats.find({ commissionProcessed: { $ne: true } }).lean();
+      const withAgents = await DailyGameStats.find({ "agents": { $exists: true, $ne: {} } }).sort({ date: -1 }).limit(10).lean();
+      
+      logger.info(`[DEBUG] allStats: ${allStats.length}, unprocessed: ${unprocessed.length}, withAgents: ${withAgents.length}`);
+      
+      return res.json({ 
+        status: "success", 
+        debug: {
+          allStatsCount: allStats.length,
+          unprocessedCount: unprocessed.length,
+          withAgentsCount: withAgents.length,
+          sampleAllStats: allStats.map(d => ({ date: d.date, commissionProcessed: d.commissionProcessed, agentKeys: d.agents ? Object.keys(d.agents) : [] })),
+          sampleUnprocessed: unprocessed.map(d => ({ date: d.date, commissionProcessed: d.commissionProcessed, agentKeys: d.agents ? Object.keys(d.agents) : [] })),
+          sampleWithAgents: withAgents.map(d => ({ date: d.date, commissionProcessed: d.commissionProcessed, agentKeys: d.agents ? Object.keys(d.agents) : [] }))
+        }
+      });
+    }
+    
     const result = await processMidnightBatch();
     res.json({ status: "success", ...result });
   } catch (error) {
