@@ -6,7 +6,8 @@ import DepositOrder from "../models/depositOrder.model.js";
 import WithdrawalOrder from "../models/withdrawalOrder.model.js";
 import PaymentMethod from "../models/paymentMethod.model.js";
 import { deposit } from "../services/wallet.service.js";
-import { incrementDepositTally } from "../services/agency.service.js";
+import { incrementDepositTally, processMidnightBatch } from "../services/agency.service.js";
+import AgencyCommission from "../models/agencyCommission.model.js";
 import logger from "../utils/logger.js";
 import VipConfig, { ensureDefaultVipConfig } from "../models/vipConfig.model.js";
 import DepositConfig, { ensureDefaultDepositConfigs } from "../models/depositConfig.model.js";
@@ -1611,6 +1612,72 @@ async function getUserBetDailyStats(req, res) {
   }
 }
 
+async function adminRunMidnightBatch(req, res) {
+  try {
+    const result = await processMidnightBatch();
+    res.json({ status: "success", ...result });
+  } catch (error) {
+    logger.error(error, { where: "adminRunMidnightBatch" });
+    res.status(500).json({ msg: error.message, status: "failed" });
+  }
+}
+
+async function getAgentCommissionRecords(req, res) {
+  try {
+    const { userId, page = 1, limit = 50, dateFrom, dateTo } = req.query;
+    const idNum = Number(userId);
+    if (!userId || Number.isNaN(idNum)) {
+      return res.status(400).json({ msg: "Invalid or missing userId" });
+    }
+
+    const user = await userModel.findOne({ userId: idNum }).select("userId").lean();
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const p = Math.max(1, Number(page));
+    const l = Math.max(1, Math.min(100, Number(limit)));
+    const skip = (p - 1) * l;
+    const query = { userId: idNum };
+
+    if (dateFrom || dateTo) {
+      query.date = {};
+      if (dateFrom) query.date.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        query.date.$lte = end;
+      }
+    }
+
+    const [items, total] = await Promise.all([
+      AgencyCommission.find(query).sort({ date: -1 }).skip(skip).limit(l).lean(),
+      AgencyCommission.countDocuments(query),
+    ]);
+
+    const data = items.map((r) => ({
+      userId: r.userId,
+      date: r.date,
+      rebateLevel: r.rebateLevel,
+      l1Bets: r.l1Bets,
+      l2Bets: r.l2Bets,
+      l3Bets: r.l3Bets,
+      l1Rate: r.l1Rate,
+      l2Rate: r.l2Rate,
+      l3Rate: r.l3Rate,
+      l1Amount: r.l1Amount,
+      l2Amount: r.l2Amount,
+      l3Amount: r.l3Amount,
+      totalAmount: r.totalAmount,
+      status: r.status,
+      creditedAt: r.creditedAt,
+    }));
+
+    res.json({ status: "success", total, page: p, limit: l, data });
+  } catch (error) {
+    logger.error(error, { where: "getAgentCommissionRecords", query: req.query });
+    res.status(500).json({ msg: error.message });
+  }
+}
+
 export default {
   createAdminTransaction,
   getAdminDashboard,
@@ -1650,4 +1717,6 @@ export default {
   getUserBetDailyStats,
   getGameAllBets,
   getWingoAllBets,
+  adminRunMidnightBatch,
+  getAgentCommissionRecords,
 };
