@@ -1678,6 +1678,59 @@ async function getAgentCommissionRecords(req, res) {
   }
 }
 
+async function getCommissionRecords(req, res) {
+  try {
+    const { dateFrom, dateTo, page = 1, limit = 50 } = req.query;
+    const p = Math.max(1, Number(page));
+    const l = Math.max(1, Math.min(100, Number(limit)));
+    const skip = (p - 1) * l;
+    const match = {};
+
+    if (dateFrom || dateTo) {
+      match.date = {};
+      if (dateFrom) match.date.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        match.date.$lte = end;
+      }
+    }
+
+    const [results, total, summary] = await Promise.all([
+      AgencyCommission.aggregate([
+        { $match: match },
+        { $sort: { totalAmount: -1 } },
+        { $skip: skip },
+        { $limit: l },
+        { $project: { _id: 0, userId: 1, date: 1, rebateLevel: 1, l1Bets: 1, l2Bets: 1, l3Bets: 1, totalAmount: 1 } },
+      ]),
+      AgencyCommission.countDocuments(match),
+      AgencyCommission.aggregate([
+        { $match: match },
+        { $group: { _id: null, totalComm: { $sum: "$totalAmount" }, highestAmount: { $max: "$totalAmount" }, totalAgents: { $addToSet: "$userId" } } },
+      ]),
+    ]);
+
+    const data = results.map((r, i) => ({
+      rank: skip + i + 1,
+      userId: r.userId,
+      date: r.date,
+      rebateLevel: r.rebateLevel,
+      l1Bets: r.l1Bets,
+      l2Bets: r.l2Bets,
+      l3Bets: r.l3Bets,
+      totalComm: r.totalAmount,
+    }));
+
+    const s = summary[0] || { totalComm: 0, highestAmount: 0, totalAgents: [] };
+
+    res.json({ status: "success", total, page: p, limit: l, data, summary: { totalComm: s.totalComm, highestAmount: s.highestAmount, totalAgents: s.totalAgents.length || 0 } });
+  } catch (error) {
+    logger.error(error, { where: "getCommissionRecords", query: req.query });
+    res.status(500).json({ msg: error.message });
+  }
+}
+
 export default {
   createAdminTransaction,
   getAdminDashboard,
@@ -1719,4 +1772,5 @@ export default {
   getWingoAllBets,
   adminRunMidnightBatch,
   getAgentCommissionRecords,
+  getCommissionRecords,
 };

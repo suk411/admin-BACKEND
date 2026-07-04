@@ -65,6 +65,7 @@ router.put("/agency-levels/:level", adminController.updateAgencyLevelConfig);
 router.get("/agent/team-stats", adminController.getUserTeamStats);
 router.get("/agent/team-members", adminController.getUserTeamMembers);
 router.get("/agent/agentcomm", adminController.getAgentCommissionRecords);
+router.get("/agent/commision-records", adminController.getCommissionRecords);
 router.post("/agent/runmidnightcalc", adminController.adminRunMidnightBatch);
 
 // Bet search
