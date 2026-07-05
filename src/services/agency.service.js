@@ -5,6 +5,7 @@ import AgencyDailyTally from "../models/agencyDailyTally.model.js";
 import userModel from "../models/user.model.js";
 import accountModel from "../models/account.model.js";
 import transactionLedgerModel from "../models/transactionLedger.model.js";
+import TurnoverConfig from "../models/turnoverConfig.model.js";
 import mongoose from "mongoose";
 import { parseISTDate, toISTDate, toISTString } from "../utils/time.js";
 
@@ -140,6 +141,30 @@ export async function processMidnightBatch() {
         balanceAfter: currentBalance + total,
         status: "SUCCESS",
       });
+
+      const commMultiplier = await TurnoverConfig.getMultiplier("AGENT_COMMISSION");
+      if (commMultiplier > 0) {
+        const required = parseFloat((total * commMultiplier).toFixed(2));
+        if (required > 0) {
+          await accountModel.updateOne(
+            { user: uid },
+            {
+              $inc: { turnover_requirement: required },
+              $push: {
+                turnover_batches: {
+                  type: "AGENT_COMMISSION",
+                  amount: total,
+                  multiplier: commMultiplier,
+                  required,
+                  completed: 0,
+                  createdAt: new Date(),
+                },
+              },
+            },
+          );
+        }
+      }
+
       totalCommission += total;
     }
 

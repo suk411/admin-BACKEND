@@ -17,6 +17,7 @@ const turnoverConfigSchema = new mongoose.Schema(
         "REFERRAL_BONUS",
         "PROMOTION",
         "DEPOSIT_BONUS",
+        "AGENT_COMMISSION",
       ],
     },
     multiplier: {
@@ -49,6 +50,7 @@ turnoverConfigSchema.statics.getDefaultConfig = async function () {
     { type: "REFERRAL_BONUS", multiplier: 1, description: "Referral bonus turnover requirement", active: true },
     { type: "PROMOTION", multiplier: 1, description: "Promotion bonus turnover requirement", active: true },
     { type: "DEPOSIT_BONUS", multiplier: 7, description: "Deposit bonus turnover requirement", active: true },
+    { type: "AGENT_COMMISSION", multiplier: 1, description: "Agent commission turnover requirement", active: true },
   ];
 
   for (const def of defaults) {

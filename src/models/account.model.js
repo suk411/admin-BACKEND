@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const turnoverBatchSchema = new mongoose.Schema({
   type: {
     type: String,
-    enum: ["DEPOSIT", "BONUS", "SIGNUP_BONUS", "FIRST_DEPOSIT_BONUS", "VIP_BONUS", "WEEKLY_BONUS", "UPGRADE_BONUS", "ADMIN_BONUS", "GIFT_CODE", "DEPOSIT_BONUS"],
+    enum: ["DEPOSIT", "BONUS", "SIGNUP_BONUS", "FIRST_DEPOSIT_BONUS", "VIP_BONUS", "WEEKLY_BONUS", "UPGRADE_BONUS", "ADMIN_BONUS", "GIFT_CODE", "DEPOSIT_BONUS", "AGENT_COMMISSION"],
     required: true,
   },
   amount: {
