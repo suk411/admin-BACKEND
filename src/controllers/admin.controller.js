@@ -1680,20 +1680,18 @@ async function getAgentCommissionRecords(req, res) {
 
 async function getCommissionRecords(req, res) {
   try {
-    const { dateFrom, dateTo, page = 1, limit = 50 } = req.query;
+    const { date, page = 1, limit = 50 } = req.query;
     const p = Math.max(1, Number(page));
     const l = Math.max(1, Math.min(100, Number(limit)));
     const skip = (p - 1) * l;
     const match = {};
 
-    if (dateFrom || dateTo) {
-      match.date = {};
-      if (dateFrom) match.date.$gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        match.date.$lte = end;
-      }
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      match.date = { $gte: start, $lte: end };
     }
 
     const [results, total, summary] = await Promise.all([
