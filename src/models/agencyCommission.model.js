@@ -22,5 +22,6 @@ const agencyCommissionSchema = new mongoose.Schema(
 );
 
 agencyCommissionSchema.index({ userId: 1, date: -1 });
+agencyCommissionSchema.index({ date: 1, totalAmount: -1 });
 
 export default mongoose.model("AgencyCommission", agencyCommissionSchema);
