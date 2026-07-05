@@ -110,7 +110,7 @@ async function updateGiftCode(req, res) {
       giftCode.expiryDate = expiry;
     }
     if (minDepositToday !== undefined) giftCode.minDepositToday = Number(minDepositToday);
-    if (isActive !== undefined) giftCode.isActive = Boolean(isActive);
+    if (isActive !== undefined) giftCode.isActive = isActive === true || isActive === "true";
     if (description !== undefined) giftCode.description = String(description);
 
     await giftCode.save();
@@ -142,10 +142,10 @@ async function toggleGiftCode(req, res) {
       return res.status(404).json({ status: "failed", msg: "Gift code not found" });
     }
 
-    giftCode.isActive = Boolean(isActive);
+    giftCode.isActive = isActive === true || isActive === "true";
     await giftCode.save();
 
-    logger.info(`[GiftCode] ${isActive ? "Enabled" : "Disabled"} code: ${code} by admin ${req.user.userId}`);
+    logger.info(`[GiftCode] ${giftCode.isActive ? "Enabled" : "Disabled"} code: ${code} by admin ${req.user.userId}`);
 
     res.json({
       status: "success",
