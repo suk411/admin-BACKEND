@@ -4,6 +4,7 @@ import app from "./src/app.js";
 import { connectDB } from "./src/config/db.js";
 import { connectWingoDB } from "./src/config/wingo-db.js";
 import { connectRedis } from "./src/config/redis.js";
+import { startAgencyMidnightScheduler } from "./src/jobs/agencyMidnightJob.js";
 
 async function startServer() {
   try {
@@ -13,6 +14,7 @@ async function startServer() {
 
     const server = app.listen(process.env.PORT || 5000, () => {
       console.log(`[Admin] Listening on port ${process.env.PORT || 5000}`);
+      startAgencyMidnightScheduler();
     });
 
     return server;
