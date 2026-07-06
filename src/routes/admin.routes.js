@@ -2,6 +2,7 @@ import express from "express";
 import adminController from "../controllers/admin.controller.js";
 import giftCodeController from "../controllers/giftCode.controller.js";
 import { setMode, getMode, getAdminCurrentRound, getCurrentRoundBets, getRoundStats, getRounds } from "../controllers/wingoAdmin.controller.js";
+import { getBotConfig, updateBotConfig } from "../controllers/botConfig.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -95,5 +96,9 @@ router.get("/current-round", getAdminCurrentRound);
 router.get("/current-round/bets", getCurrentRoundBets);
 router.get("/round-stats/:issueNumber", getRoundStats);
 router.get("/rounds", getRounds);
+
+// Bot config
+router.get("/bot-config", getBotConfig);
+router.put("/bot-config", updateBotConfig);
 
 export default router;
