@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const botConfigSchema = new mongoose.Schema({
-  ownerId: { type: String, default: "" },
+  ownerIds: [{ type: String }],
   allowedUserIds: [{ type: String }],
   allowedGroupIds: [{ type: String }],
 }, { timestamps: true });

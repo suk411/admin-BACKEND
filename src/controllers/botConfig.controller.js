@@ -6,7 +6,14 @@ async function getBotConfig(req, res) {
     if (!config) {
       config = await BotConfig.create({});
     }
-    res.json({ success: true, data: config });
+    res.json({
+      success: true,
+      data: {
+        ownerIds: config.ownerIds,
+        allowedUserIds: config.allowedUserIds,
+        allowedGroupIds: config.allowedGroupIds,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, msg: error.message });
   }
@@ -17,13 +24,20 @@ async function updateBotConfig(req, res) {
     if (!req.user?.admin) {
       return res.status(403).json({ success: false, msg: "Admins only" });
     }
-    const { ownerId, allowedUserIds, allowedGroupIds } = req.body;
+    const { ownerIds, allowedUserIds, allowedGroupIds } = req.body;
     const config = await BotConfig.findOneAndUpdate(
       {},
-      { ownerId: ownerId || "", allowedUserIds: allowedUserIds || [], allowedGroupIds: allowedGroupIds || [] },
+      { ownerIds: ownerIds || [], allowedUserIds: allowedUserIds || [], allowedGroupIds: allowedGroupIds || [] },
       { upsert: true, new: true },
     );
-    res.json({ success: true, data: config });
+    res.json({
+      success: true,
+      data: {
+        ownerIds: config.ownerIds,
+        allowedUserIds: config.allowedUserIds,
+        allowedGroupIds: config.allowedGroupIds,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, msg: error.message });
   }
