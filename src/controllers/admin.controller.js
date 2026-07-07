@@ -91,8 +91,34 @@ async function getAdminDashboard(req, res) {
     const hasDateFilter = Object.keys(createdAtFilter).length > 0;
     const dateMatch = hasDateFilter ? { createdAt: createdAtFilter } : {};
     const commissionMatch = hasDateFilter ? { ...dateMatch, type: "AGENT_COMMISSION" } : { type: "AGENT_COMMISSION" };
+    // Trend granularity
+    const isHourly = period === "today" || !!date;
+    const isDaily = period === "month";
+    const granularity = isHourly ? "hourly" : isDaily ? "daily" : "monthly";
 
-    const [totalUsers, newUsers, depositStats, withdrawalStats, agentCommissions] = await Promise.all([
+    let dateGroupExpr;
+    if (isHourly) {
+      dateGroupExpr = { $dateToString: { format: "%Y-%m-%dT%H:00:00", date: "$createdAt" } };
+    } else if (isDaily) {
+      dateGroupExpr = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } };
+    } else {
+      dateGroupExpr = { $dateToString: { format: "%Y-%m", date: "$createdAt" } };
+    }
+
+    const trendMatch = hasDateFilter
+      ? dateMatch
+      : { createdAt: { $gte: (() => { const d = new Date(); d.setMonth(d.getMonth() - 12); return d; })() } };
+
+    const [
+      totalUsers, newUsers, depositStats, withdrawalStats, agentCommissions,
+      depositTrend, withdrawalTrend, signupTrend,
+      depositsByChannel, withdrawalsByMethod,
+      usersByVipLevelAgg, usersByStatusAgg, transactionTypeAgg,
+      activeUsersAgg,
+      depositorStatsAgg,
+      pendingAgingAgg, platformAgg,
+    ] = await Promise.all([
+      // Existing queries
       accountModel.countDocuments(),
       hasDateFilter ? userModel.countDocuments({ createdAt: createdAtFilter }) : Promise.resolve(0),
       DepositOrder.aggregate([
@@ -107,14 +133,100 @@ async function getAdminDashboard(req, res) {
         { $match: commissionMatch },
         { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } },
       ]),
+      // Trends
+      DepositOrder.aggregate([
+        { $match: { ...trendMatch, status: "SUCCESS" } },
+        { $group: { _id: dateGroupExpr, amount: { $sum: "$amount" }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      WithdrawalOrder.aggregate([
+        { $match: { ...trendMatch, status: "SUCCESS" } },
+        { $group: { _id: dateGroupExpr, amount: { $sum: "$amount" }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      userModel.aggregate([
+        { $match: trendMatch },
+        { $group: { _id: dateGroupExpr, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      // Distributions
+      DepositOrder.aggregate([
+        { $match: { ...dateMatch, status: "SUCCESS" } },
+        { $group: { _id: "$channelName", count: { $sum: 1 }, amount: { $sum: "$amount" } } },
+        { $sort: { amount: -1 } },
+      ]),
+      WithdrawalOrder.aggregate([
+        { $match: { ...dateMatch, status: "SUCCESS" } },
+        { $group: { _id: "$paymentMethod", count: { $sum: 1 }, amount: { $sum: "$amount" } } },
+        { $sort: { amount: -1 } },
+      ]),
+      accountModel.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$vipLevel", count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      accountModel.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      transactionLedgerModel.aggregate([
+        { $match: { ...dateMatch, status: "SUCCESS" } },
+        { $group: { _id: "$type", count: { $sum: 1 }, amount: { $sum: "$amount" } } },
+        { $sort: { amount: -1 } },
+      ]),
+      // KPI
+      transactionLedgerModel.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$userId" } },
+        { $count: "count" },
+      ]),
+      DepositOrder.aggregate([
+        { $match: { ...dateMatch, status: "SUCCESS" } },
+        { $group: { _id: "$userId", count: { $sum: 1 } } },
+        { $match: { count: { $gt: 1 } } },
+        { $count: "count" },
+      ]),
+      WithdrawalOrder.aggregate([
+        { $match: { ...dateMatch, status: { $in: ["PENDING", "AUDITING"] } } },
+        { $addFields: {
+            ageHours: {
+              $divide: [
+                { $subtract: [new Date(), "$createdAt"] },
+                3600000
+              ]
+            }
+          }
+        },
+        { $addFields: {
+            bucket: {
+              $switch: {
+                branches: [
+                  { case: { $lt: ["$ageHours", 1] }, then: "<1h" },
+                  { case: { $lt: ["$ageHours", 6] }, then: "1-6h" },
+                  { case: { $lt: ["$ageHours", 24] }, then: "6-24h" },
+                ],
+                default: ">24h"
+              }
+            }
+          }
+        },
+        { $group: { _id: "$bucket", count: { $sum: 1 } } },
+      ]),
+      // Platform
+      accountModel.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: null, totalBalance: { $sum: "$balance" }, totalWithdrawable: { $sum: "$withdrawable" }, pendingTurnover: { $sum: "$turnover_requirement" } } },
+      ]),
     ]);
 
+    // Existing: process deposits
     const deposits = { total: 0, count: 0, pendingCount: 0 };
     for (const d of depositStats) {
       if (d._id === "SUCCESS") { deposits.total = d.total; deposits.count = d.count; }
       if (d._id === "PENDING") deposits.pendingCount = d.count;
     }
 
+    // Existing: process withdrawals
     const byStatus = {};
     let wCount = 0, wTotal = 0, wChargeTotal = 0;
     const wSuccess = { count: 0, total: 0, chargeTotal: 0 };
@@ -130,6 +242,54 @@ async function getAdminDashboard(req, res) {
       else if (["PENDING", "AUDITING"].includes(s._id)) { wPending.count += s.count; wPending.total += s.total; wPending.chargeTotal += s.chargeTotal; }
       else if (s._id === "FAILED") { wFailed.count = s.count; wFailed.total = s.total; wFailed.chargeTotal = s.chargeTotal; }
     }
+
+    // NEW: Trends
+    const trends = {
+      granularity,
+      deposits: depositTrend.map(d => ({ date: d._id, amount: d.amount, count: d.count })),
+      withdrawals: withdrawalTrend.map(d => ({ date: d._id, amount: d.amount, count: d.count })),
+      signups: signupTrend.map(d => ({ date: d._id, count: d.count })),
+    };
+
+    const trendMap = {};
+    for (const d of depositTrend) trendMap[d._id] = { deposit: d.amount };
+    for (const w of withdrawalTrend) {
+      if (trendMap[w._id]) trendMap[w._id].withdrawal = w.amount;
+      else trendMap[w._id] = { deposit: 0, withdrawal: w.amount };
+    }
+    const allDates = [...new Set([...depositTrend.map(d => d._id), ...withdrawalTrend.map(d => d._id)])].sort();
+    trends.netCashflow = allDates.map(date => ({
+      date,
+      amount: (trendMap[date]?.deposit || 0) - (trendMap[date]?.withdrawal || 0),
+    }));
+
+    // NEW: Distributions
+    const distributions = {
+      depositsByChannel: depositsByChannel.map(d => ({ channel: d._id, count: d.count, amount: d.amount })),
+      withdrawalsByMethod: withdrawalsByMethod.map(d => ({ method: d._id, count: d.count, amount: d.amount })),
+      depositByStatus: depositStats.map(d => ({ status: d._id, count: d.count, amount: d.total })),
+      withdrawalByStatus: withdrawalStats.map(d => ({ status: d._id, count: d.count, amount: d.total, chargeTotal: d.chargeTotal })),
+      usersByVipLevel: usersByVipLevelAgg.map(d => ({ level: d._id, count: d.count })),
+      usersByStatus: usersByStatusAgg.map(d => ({ status: d._id, count: d.count })),
+      transactionTypes: transactionTypeAgg.map(d => ({ type: d._id, count: d.count, amount: d.amount })),
+    };
+
+    // NEW: KPI
+    const totalDepositAll = depositStats.reduce((s, d) => s + d.count, 0);
+    const totalWithdrawalAll = withdrawalStats.reduce((s, d) => s + d.count, 0);
+    const kpi = {
+      avgDepositAmount: deposits.count ? +(deposits.total / deposits.count).toFixed(2) : 0,
+      avgWithdrawalAmount: wSuccess.count ? +(wSuccess.total / wSuccess.count).toFixed(2) : 0,
+      depositSuccessRate: totalDepositAll > 0 ? +(deposits.count / totalDepositAll).toFixed(4) : 0,
+      withdrawalSuccessRate: totalWithdrawalAll > 0 ? +(wSuccess.count / totalWithdrawalAll).toFixed(4) : 0,
+      activeUsers: activeUsersAgg[0]?.count || 0,
+      usersWhoDeposited: deposits.count,
+      repeatDepositors: depositorStatsAgg[0]?.count || 0,
+      pendingQueueAging: pendingAgingAgg.map(d => ({ bucket: d._id, count: d.count })),
+    };
+
+    // NEW: Platform
+    const platform = platformAgg[0] || { totalBalance: 0, totalWithdrawable: 0, pendingTurnover: 0 };
 
     res.json({
       status: "success",
@@ -149,6 +309,10 @@ async function getAdminDashboard(req, res) {
         total: agentCommissions[0]?.total || 0,
         count: agentCommissions[0]?.count || 0,
       },
+      trends,
+      distributions,
+      kpi,
+      platform,
     });
   } catch (error) {
     logger.error(error, { where: "getAdminDashboard" });
