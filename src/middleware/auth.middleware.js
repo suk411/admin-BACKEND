@@ -8,7 +8,6 @@ export async function authMiddleware(req, res, next) {
     if (botToken) {
       const expectedToken = (process.env.BOT_API_KEY || '').trim();
       if (!expectedToken || botToken !== expectedToken) {
-        console.warn('[auth] bot token mismatch: header="' + botToken + '" env="' + expectedToken + '"');
         return res.status(403).json({ msg: "Invalid bot token", status: "failed" });
       }
       req.user = { bot: true };
